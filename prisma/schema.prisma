@@ -1,0 +1,683 @@
+// Nightfall — Phase 1 (Foundation) schema.
+// Scope: identity/profile, the append-only points ledger, badges, and phone-OTP auth.
+// Later phases add rooms, social feed, meetups, trips, payments (see docs/architecture.md §3).
+//
+// Design invariants:
+//   - PointEntry is APPEND-ONLY. It is the source of truth for a user's score.
+//   - User.pointsBalance / User.level are denormalized caches, recomputed inside the same
+//     transaction that inserts a PointEntry (see lib/gamification/award.ts).
+//   - Level gates (host A/V room L5, meetup L10, trip L20) are enforced server-side.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────── Identity & profile ───────────────────────────────
+
+model User {
+  id          String   @id @default(cuid())
+  phone       String   @unique // E.164, verified via OTP
+  handle      String   @unique // public @handle
+  displayName String
+  bio         String?
+  avatarUrl   String?
+  interests   String[] @default([])
+
+  // Denormalized gamification caches. Source of truth is the PointEntry ledger.
+  pointsBalance Int  @default(0)
+  level         Int  @default(1)
+  rank          Rank @default(BRONZE)
+
+  status    UserStatus @default(ACTIVE)
+  role      UserRole   @default(USER)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  pointEntries   PointEntry[] @relation("PointEntryUser")
+  awardedEntries PointEntry[] @relation("PointEntryAwardedBy")
+  badges         UserBadge[]
+  sessions       Session[]
+
+  // Social graph & content
+  posts     Post[]
+  comments  Comment[]
+  likes     Like[]
+  following Follow[]  @relation("Follower")
+  followers Follow[]  @relation("Following")
+  blocking  Block[]   @relation("Blocker")
+  blockedBy Block[]   @relation("Blocked")
+  reports   Report[]  @relation("Reporter")
+
+  // Moderation & messaging
+  reviewedReports   Report[]           @relation("Reviewer")
+  moderationActions ModerationAction[] @relation("ModActor")
+  dmThreadsA        DmThread[]         @relation("DmUserA")
+  dmThreadsB        DmThread[]         @relation("DmUserB")
+  sentMessages      Message[]          @relation("MessageSender")
+
+  // A/V rooms
+  hostedRooms        Room[]            @relation("RoomHost")
+  roomParticipations RoomParticipant[]
+
+  // Meetups & payments
+  hostedMeetups   Meetup[]  @relation("MeetupHost")
+  approvedMeetups Meetup[]  @relation("MeetupApprover")
+  bookings        Booking[]
+  payments        Payment[]
+
+  // Trips & payouts
+  hostedTrips     Trip[]        @relation("TripHost")
+  approvedTrips   Trip[]        @relation("TripApprover")
+  tripBookings    TripBooking[]
+  vettedVendors   TripVendor[]  @relation("VendorVetter")
+  payouts         Payout[]      @relation("PayoutHost")
+  approvedPayouts Payout[]      @relation("PayoutApprover")
+
+  @@index([level])
+  @@index([pointsBalance])
+}
+
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  DELETED
+}
+
+// Rank tiers are derived from level (see lib/gamification/levels.ts) and cached on User.
+enum Rank {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+}
+
+// ─────────────────────────────── Points ledger ───────────────────────────────
+
+// Append-only. Never updated or deleted. Corrections are new (possibly negative) entries.
+model PointEntry {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("PointEntryUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  amount Int // may be negative for admin corrections
+  reason PointReason
+
+  // Polymorphic provenance: which room/meetup/etc. produced this award.
+  sourceType String? // e.g. "room", "meetup"
+  sourceId   String?
+
+  // Who granted it (room host or admin); null for automated/system awards.
+  awardedById String?
+  awardedBy   User?   @relation("PointEntryAwardedBy", fields: [awardedById], references: [id], onDelete: SetNull)
+
+  note      String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([reason])
+  @@index([sourceType, sourceId])
+}
+
+enum PointReason {
+  ROOM_GAME_WIN
+  ROOM_TASK_COMPLETE
+  MEETUP_ATTENDED
+  TRIP_ATTENDED
+  CONTENT_ENGAGEMENT
+  DAILY_LOGIN
+  REFERRAL
+  ADMIN_ADJUSTMENT
+}
+
+// ─────────────────────────────── Badges ───────────────────────────────
+
+model Badge {
+  id          String  @id @default(cuid())
+  code        String  @unique // stable machine key, e.g. "first_room"
+  name        String
+  description String
+  iconUrl     String?
+  criteria    Json?
+
+  users     UserBadge[]
+  createdAt DateTime    @default(now())
+}
+
+model UserBadge {
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badgeId String
+  badge   Badge  @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  awardedAt DateTime @default(now())
+
+  @@id([userId, badgeId])
+  @@index([badgeId])
+}
+
+// ─────────────────────────────── Auth (phone OTP) ───────────────────────────────
+
+// Short-lived one-time codes. codeHash is a hash of the OTP, never the raw code.
+model PhoneOtp {
+  id         String     @id @default(cuid())
+  phone      String
+  codeHash   String
+  purpose    OtpPurpose @default(LOGIN)
+  attempts   Int        @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  @@index([phone, purpose])
+  @@index([expiresAt])
+}
+
+enum OtpPurpose {
+  LOGIN
+  PHONE_CHANGE
+}
+
+// Refresh-token sessions shared across web + native clients. tokenHash is a hash, not the token.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  userAgent  String?
+  ip         String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ─────────────────────────────── Social core (Phase 2) ───────────────────────────────
+
+model Post {
+  id       String   @id @default(cuid())
+  authorId String
+  author   User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  type     PostType @default(TEXT)
+  caption  String?
+  mediaUrl String? // image/video URL (upload pipeline comes later)
+
+  // Denormalized engagement counters, kept in sync inside the mutation transactions.
+  likeCount    Int @default(0)
+  commentCount Int @default(0)
+
+  createdAt DateTime  @default(now())
+  comments  Comment[]
+  likes     Like[]
+
+  @@index([authorId, createdAt])
+  @@index([createdAt])
+}
+
+enum PostType {
+  TEXT
+  PHOTO
+  REEL
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([postId, createdAt])
+}
+
+model Like {
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([postId, userId])
+  @@index([userId])
+}
+
+// Directed follow edge: follower -> following.
+model Follow {
+  followerId  String
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@id([followerId, followingId])
+  @@index([followingId])
+}
+
+// Directed block edge: blocker -> blocked.
+model Block {
+  blockerId String
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+// UGC moderation report. Polymorphic target (post/comment/user).
+model Report {
+  id         String       @id @default(cuid())
+  reporterId String
+  reporter   User         @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetType ReportTarget
+  targetId   String
+  reason     ReportReason
+  detail     String?
+  status     ReportStatus @default(PENDING)
+  createdAt  DateTime     @default(now())
+
+  // Set when an admin/moderator dispositions the report.
+  reviewedById String?
+  reviewedBy   User?     @relation("Reviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+}
+
+enum ReportTarget {
+  POST
+  COMMENT
+  USER
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  NUDITY
+  HATE
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  ACTIONED
+  DISMISSED
+}
+
+// Audit trail of moderator/admin actions.
+model ModerationAction {
+  id         String       @id @default(cuid())
+  actorId    String
+  actor      User         @relation("ModActor", fields: [actorId], references: [id], onDelete: Cascade)
+  action     ModActionKind
+  targetType ReportTarget
+  targetId   String
+  note       String?
+  createdAt  DateTime     @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+}
+
+enum ModActionKind {
+  DISMISS_REPORT
+  REMOVE_POST
+  SUSPEND_USER
+}
+
+// ─────────────────────────────── Direct messages (Phase 2) ───────────────────────────────
+
+// 1:1 thread. Participants stored as an ordered pair (userAId < userBId) so the pair is unique.
+model DmThread {
+  id            String   @id @default(cuid())
+  userAId       String
+  userA         User     @relation("DmUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId       String
+  userB         User     @relation("DmUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  messages Message[]
+
+  @@unique([userAId, userBId])
+  @@index([userAId, lastMessageAt])
+  @@index([userBId, lastMessageAt])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  threadId  String
+  thread    DmThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([threadId, createdAt])
+}
+
+// ─────────────────────────────── A/V rooms (Phase 3) ───────────────────────────────
+
+// A live audio/video room. Media is handled by an external SFU (LiveKit); this row is the
+// system-of-record for who's hosting, who's in it, and the point awards granted inside it.
+model Room {
+  id          String     @id @default(cuid())
+  hostId      String
+  host        User       @relation("RoomHost", fields: [hostId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      RoomStatus @default(LIVE)
+  isOfficial  Boolean    @default(false) // Nightfall-hosted vs. user-hosted (Level 5+)
+  createdAt   DateTime   @default(now())
+  endedAt     DateTime?
+
+  participants RoomParticipant[]
+
+  @@index([status, createdAt])
+  @@index([hostId])
+}
+
+enum RoomStatus {
+  LIVE
+  ENDED
+}
+
+model RoomParticipant {
+  roomId   String
+  room     Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     RoomRole @default(LISTENER)
+  joinedAt DateTime @default(now())
+  leftAt   DateTime?
+
+  @@id([roomId, userId])
+  @@index([userId])
+}
+
+enum RoomRole {
+  HOST
+  SPEAKER
+  LISTENER
+}
+
+// ─────────────────────────────── Meetups & payments (Phase 4) ───────────────────────────────
+
+// A real-world local gathering. User-hosted meetups (Level 10+) start PENDING and require admin
+// approval; Nightfall-official meetups are created APPROVED by staff.
+model Meetup {
+  id          String       @id @default(cuid())
+  hostId      String
+  host        User         @relation("MeetupHost", fields: [hostId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  city        String
+  venue       String?
+  startsAt    DateTime
+  feeCents    Int          @default(0) // entry fee in minor units (paise/cents)
+  currency    String       @default("INR")
+  capacity    Int
+  isOfficial  Boolean      @default(false)
+  hostSharePct Int         @default(70) // revenue split: host % (rest to Nightfall)
+  status      MeetupStatus @default(PENDING)
+
+  approvedById    String?
+  approvedBy      User?     @relation("MeetupApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt      DateTime?
+  rejectionReason String?
+
+  createdAt DateTime  @default(now())
+  bookings  Booking[]
+
+  @@index([status, city, startsAt])
+  @@index([hostId])
+}
+
+enum MeetupStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// A user's spot at a meetup. Revenue split is computed once at booking time and frozen here.
+model Booking {
+  id       String @id @default(cuid())
+  meetupId String
+  meetup   Meetup @relation(fields: [meetupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amountCents       Int
+  hostShareCents    Int
+  platformShareCents Int
+  status            BookingStatus @default(CONFIRMED)
+
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  // Set once the host's share of this booking is included in a payout batch.
+  payoutId String?
+  payout   Payout? @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@unique([meetupId, userId]) // one booking per user per meetup
+  @@index([userId])
+  @@index([payoutId])
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+  REFUNDED
+}
+
+// Payment record. Provider-abstracted: in dev the DEV provider marks paid without a real charge.
+model Payment {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider    PaymentProvider @default(DEV)
+  providerRef String?
+  amountCents Int
+  currency    String          @default("INR")
+  kind        PaymentKind
+  status      PaymentStatus   @default(PENDING)
+  createdAt   DateTime        @default(now())
+
+  booking     Booking?
+  tripBooking TripBooking?
+
+  @@index([userId, createdAt])
+}
+
+enum PaymentProvider {
+  DEV
+  STRIPE
+  RAZORPAY
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentKind {
+  MEETUP_BOOKING
+  TRIP_BOOKING
+}
+
+// ─────────────────────────────── Stranger trips (Phase 5) ───────────────────────────────
+
+// A multi-day trip. User-hosted trips (Level 20+) require admin approval AND vendor vetting.
+model Trip {
+  id           String     @id @default(cuid())
+  hostId       String
+  host         User       @relation("TripHost", fields: [hostId], references: [id], onDelete: Cascade)
+  title        String
+  description  String
+  destination  String
+  startsAt     DateTime
+  endsAt       DateTime
+  priceCents   Int        @default(0)
+  currency     String     @default("INR")
+  capacity     Int
+  isOfficial   Boolean    @default(false)
+  hostSharePct Int        @default(70)
+  status       TripStatus @default(PENDING)
+
+  approvedById    String?
+  approvedBy      User?     @relation("TripApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt      DateTime?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+
+  itinerary      TripItineraryDay[]
+  accommodations TripAccommodation[]
+  vendors        TripVendor[]
+  bookings       TripBooking[]
+
+  @@index([status, destination, startsAt])
+  @@index([hostId])
+}
+
+enum TripStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model TripItineraryDay {
+  id          String @id @default(cuid())
+  tripId      String
+  trip        Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  dayNumber   Int
+  title       String
+  description String
+
+  @@unique([tripId, dayNumber])
+}
+
+model TripAccommodation {
+  id      String  @id @default(cuid())
+  tripId  String
+  trip    Trip    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  name    String
+  nights  Int     @default(1)
+  address String?
+  details String?
+}
+
+// Third-party vendor (hotel/transport/etc.) that admins vet before a user-hosted trip goes live.
+model TripVendor {
+  id        String       @id @default(cuid())
+  tripId    String
+  trip      Trip         @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  kind      VendorKind
+  name      String
+  contact   String?
+  notes     String?
+  vetStatus VetStatus    @default(PENDING)
+
+  vettedById String?
+  vettedBy   User?     @relation("VendorVetter", fields: [vettedById], references: [id], onDelete: SetNull)
+  vettedAt   DateTime?
+
+  @@index([tripId])
+}
+
+enum VendorKind {
+  HOTEL
+  TRANSPORT
+  ACTIVITY
+  OTHER
+}
+
+enum VetStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Trip spot. Mirrors meetup Booking with the same frozen-split model.
+model TripBooking {
+  id     String @id @default(cuid())
+  tripId String
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amountCents        Int
+  hostShareCents     Int
+  platformShareCents Int
+  status             BookingStatus @default(CONFIRMED)
+
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  payoutId String?
+  payout   Payout? @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@unique([tripId, userId])
+  @@index([userId])
+  @@index([payoutId])
+}
+
+// ─────────────────────────────── Host payouts (Phase 5) ───────────────────────────────
+
+// A payout batch to a host, aggregating the frozen host-shares of their confirmed bookings.
+// "Automated rails, human-gated release": created PENDING, an admin approves → PAID.
+model Payout {
+  id             String       @id @default(cuid())
+  hostId         String
+  host           User         @relation("PayoutHost", fields: [hostId], references: [id], onDelete: Cascade)
+  grossCents     Int          // total gross of covered bookings
+  platformCutCents Int        // Nightfall's share
+  netCents       Int          // paid to the host (sum of frozen hostShareCents)
+  currency       String       @default("INR")
+  status         PayoutStatus @default(PENDING)
+
+  approvedById String?
+  approvedBy   User?     @relation("PayoutApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+  paidAt       DateTime?
+
+  createdAt    DateTime      @default(now())
+  bookings     Booking[]
+  tripBookings TripBooking[]
+
+  @@index([hostId, status])
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+  FAILED
+}
