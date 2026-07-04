@@ -27,7 +27,7 @@ export default async function LoginPage({
     <div className="flex flex-1 flex-col items-center justify-center bg-[#0a0a12] px-6 py-16 text-white">
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-bold tracking-tight">Welcome to Nightfall</h1>
-        <p className="mt-2 text-white/50">Sign in to join the club.</p>
+        <p className="mt-2 text-white/50">Sign in to join the club after dark.</p>
       </div>
 
       {errorMessage && (
