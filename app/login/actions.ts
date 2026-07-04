@@ -16,8 +16,12 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
     if (!parsed.success) {
       return { step: "phone", phone: String(formData.get("phone") ?? ""), error: "Enter a valid phone number in international format, e.g. +919876543210." };
     }
-    const { devCode } = await requestOtp(parsed.data.phone);
-    return { step: "code", phone: parsed.data.phone, devCode };
+    try {
+      const { devCode } = await requestOtp(parsed.data.phone);
+      return { step: "code", phone: parsed.data.phone, devCode };
+    } catch {
+      return { step: "phone", phone: parsed.data.phone, error: "Couldn't send the code right now. Please try again shortly." };
+    }
   }
 
   // intent === "verify"

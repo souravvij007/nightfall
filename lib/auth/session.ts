@@ -6,6 +6,8 @@ import type { User } from "@/lib/generated/prisma/client";
 
 const SESSION_COOKIE = "nf_session";
 const PENDING_COOKIE = "nf_pending_phone";
+const OAUTH_STATE_COOKIE = "nf_oauth_state";
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const PENDING_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -76,4 +78,22 @@ export async function getPendingPhone(): Promise<string | null> {
 
 export async function clearPendingPhone() {
   (await cookies()).delete(PENDING_COOKIE);
+}
+
+// ── OAuth CSRF state: a random value round-tripped through the provider and checked on callback. ──
+
+export async function setOAuthState(state: string) {
+  (await cookies()).set(OAUTH_STATE_COOKIE, state, {
+    ...baseCookie,
+    expires: new Date(Date.now() + OAUTH_STATE_TTL_MS),
+  });
+}
+
+/** Returns true if the callback's state matches the stored cookie (constant-time), then clears it. */
+export async function consumeOAuthState(state: string | null): Promise<boolean> {
+  const store = await cookies();
+  const stored = store.get(OAUTH_STATE_COOKIE)?.value ?? null;
+  store.delete(OAUTH_STATE_COOKIE);
+  if (!stored || !state) return false;
+  return safeEqualHex(hmac(stored), hmac(state));
 }

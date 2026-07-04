@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/client";
 import { hmac, randomNumericCode, safeEqualHex } from "./crypto";
+import { isSmsConfigured, sendSms } from "./sms";
 
 const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_ATTEMPTS = 5;
@@ -36,8 +37,16 @@ export async function requestOtp(phone: string): Promise<RequestOtpResult> {
     console.log(`[auth] OTP for ${phone}: ${code}`);
     return { devCode: code };
   }
-  // TODO(phase-1): integrate an SMS provider (e.g. Twilio) to deliver `code`.
-  return {};
+
+  if (isSmsConfigured()) {
+    await sendSms(phone, `Your Nightfall code is ${code}. It expires in 5 minutes.`);
+    return {};
+  }
+
+  // Neither dev mode nor an SMS provider is configured — the code can't be delivered.
+  // Surface this loudly rather than silently issuing an undeliverable code.
+  console.error("[auth] No OTP delivery: set OTP_DEV_MODE=true or configure Twilio (see lib/auth/sms.ts).");
+  throw new Error("SMS login is temporarily unavailable.");
 }
 
 export type VerifyOtpResult =

@@ -21,7 +21,8 @@ datasource db {
 
 model User {
   id          String   @id @default(cuid())
-  phone       String   @unique // E.164, verified via OTP
+  phone       String?  @unique // E.164, verified via OTP. Optional: OAuth users may have no phone.
+  email       String?  @unique // from OAuth (Google/Discord); optional for phone-only users
   handle      String   @unique // public @handle
   displayName String
   bio         String?
@@ -42,6 +43,7 @@ model User {
   awardedEntries PointEntry[] @relation("PointEntryAwardedBy")
   badges         UserBadge[]
   sessions       Session[]
+  oauthAccounts  OAuthAccount[]
 
   // Social graph & content
   posts     Post[]
@@ -204,6 +206,20 @@ model Session {
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime  @default(now())
 
+  @@index([userId])
+}
+
+// A linked third-party identity (Google, Discord). One user may link several providers.
+// We store only the stable provider account id — never third-party tokens.
+model OAuthAccount {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String   // "google" | "discord"
+  providerAccountId String   // the provider's stable user id ("sub" / Discord id)
+  createdAt         DateTime @default(now())
+
+  @@unique([provider, providerAccountId])
   @@index([userId])
 }
 
