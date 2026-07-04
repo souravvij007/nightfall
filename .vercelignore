@@ -1,0 +1,4 @@
+# Never upload local env files to Vercel — the platform injects the real
+# production env vars. Uploading .env would leak the local DB URL into builds.
+.env
+.env.local
