@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/client";
 import { progressForPoints, unlockedFeatures, FEATURE_UNLOCK_LEVEL, type Feature } from "@/lib/gamification/levels";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/shell/AppShell";
+import { HomeSidebar } from "@/components/shell/HomeSidebar";
 import { claimDailyLoginAction, awardDemoAction, logoutAction } from "./actions";
 
 const FEATURE_LABELS: Record<Feature, string> = {
@@ -33,9 +34,13 @@ export default async function MePage() {
   const unlocked = new Set(unlockedFeatures(p.level));
 
   return (
-    <div className="flex flex-1 flex-col items-center bg-[#0a0a12] px-6 py-12 text-white">
-      <div className="w-full max-w-xl">
-        <AppNav active="me" />
+    <AppShell activeServerId="home" sidebar={<HomeSidebar active="me" />}>
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4 shadow-sm">
+        <span className="text-muted">✨</span>
+        <span className="font-semibold text-bright">You</span>
+      </header>
+      <div className="dc-scroll flex-1 overflow-y-auto text-white">
+        <div className="mx-auto w-full max-w-xl px-4 py-8">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
@@ -128,7 +133,8 @@ export default async function MePage() {
             })}
           </ul>
         </div>
+        </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

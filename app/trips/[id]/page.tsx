@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getTrip } from "@/lib/trips/service";
 import { formatMoney } from "@/lib/money";
-import { AppNav } from "@/components/AppNav";
+import { HomePane } from "@/components/shell/HomePane";
 import { bookTripAction } from "../actions";
 
 const VENDOR_ICON: Record<string, string> = { HOTEL: "🏨", TRANSPORT: "🚐", ACTIVITY: "🎯", OTHER: "📦" };
@@ -29,12 +29,10 @@ export default async function TripPage({
   const alreadyBooked = t.myBooking?.status === "CONFIRMED";
 
   return (
-    <div className="flex flex-1 flex-col items-center bg-[#0a0a12] px-6 py-8 text-white">
-      <div className="w-full max-w-xl">
-        <AppNav />
-        <Link href="/trips" className="mb-4 inline-block text-sm text-white/40 hover:text-white">← All trips</Link>
+    <HomePane active="trips" icon="🧭" title={t.title}>
+      <Link href="/trips" className="mb-4 inline-block text-sm text-muted hover:text-bright">← All trips</Link>
 
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+      <div className="rounded-2xl border border-line bg-surface p-6 text-white">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold">{t.title}</h1>
             {t.isOfficial && <span className="rounded bg-indigo-500/20 px-1.5 py-0.5 text-xs text-indigo-300">Official</span>}
@@ -93,7 +91,7 @@ export default async function TripPage({
           </dl>
 
           <div className="mt-6">
-            {booked && <p className="mb-3 rounded-lg bg-emerald-400/10 px-3 py-2 text-sm text-emerald-300">You're booked! 🎉 Adventure awaits.</p>}
+            {booked && <p className="mb-3 rounded-lg bg-emerald-400/10 px-3 py-2 text-sm text-emerald-300">You&apos;re booked! 🎉 Adventure awaits.</p>}
             {error && <p className="mb-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p>}
 
             {isHost ? (
@@ -114,15 +112,14 @@ export default async function TripPage({
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </HomePane>
   );
 }
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-white/[0.03] px-3 py-2">
-      <dt className="text-xs text-white/40">{label}</dt>
+    <div className="rounded-lg bg-panel px-3 py-2">
+      <dt className="text-xs text-muted">{label}</dt>
       <dd className="text-white/90">{value}</dd>
     </div>
   );

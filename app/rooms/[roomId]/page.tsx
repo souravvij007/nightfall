@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getRoom } from "@/lib/rooms/service";
-import { AppNav } from "@/components/AppNav";
+import { HomePane } from "@/components/shell/HomePane";
 import { RealtimeRefresh } from "@/components/realtime/RealtimeRefresh";
 import { LiveKitStage } from "@/components/rooms/LiveKitStage";
 import { joinRoomAction, leaveRoomAction, endRoomAction, awardRoomAction } from "../actions";
@@ -145,11 +145,8 @@ function AwardButton({
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-1 flex-col items-center bg-[#0a0a12] px-6 py-8 text-white">
-      <div className="w-full max-w-xl">
-        <AppNav />
-        {children}
-      </div>
-    </div>
+    <HomePane active="rooms" icon="🎙️" title="Live room">
+      <div className="text-white">{children}</div>
+    </HomePane>
   );
 }
