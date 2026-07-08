@@ -13,6 +13,8 @@ import {
 } from "@/lib/servers/service";
 import { sendChannelMessage } from "@/lib/servers/messages";
 import { joinVoiceChannel, leaveVoiceChannel } from "@/lib/servers/voice";
+import { awardInRoom } from "@/lib/rooms/service";
+import { PointReason } from "@/lib/generated/prisma/enums";
 
 export interface ServerFormState {
   error?: string;
@@ -95,6 +97,22 @@ export async function leaveVoiceAction(formData: FormData) {
   const channelId = String(formData.get("channelId") ?? "");
   if (!channelId) return;
   await leaveVoiceChannel(user.id, channelId);
+  revalidatePath(`/servers/${serverId}/${channelId}`);
+}
+
+/** Host awards points to a participant in a voice channel (reuses the room award loop). */
+export async function awardVoiceAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const serverId = String(formData.get("serverId") ?? "");
+  const channelId = String(formData.get("channelId") ?? "");
+  const roomId = String(formData.get("roomId") ?? "");
+  const targetUserId = String(formData.get("targetUserId") ?? "");
+  const reason = String(formData.get("reason") ?? "") as PointReason;
+  const allowed: PointReason[] = ["ROOM_GAME_WIN", "ROOM_TASK_COMPLETE"];
+  if (roomId && targetUserId && allowed.includes(reason)) {
+    await awardInRoom(user.id, roomId, targetUserId, reason);
+  }
   revalidatePath(`/servers/${serverId}/${channelId}`);
 }
 

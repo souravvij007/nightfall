@@ -99,6 +99,8 @@ async function VoiceBody({
   return (
     <VoiceChannel
       serverId={serverId}
+      viewerId={user}
+      isHost={voice.hostId === user}
       voice={{ channel: voice.channel, roomId: voice.roomId, participants: voice.participants, inRoom: voice.inRoom }}
     />
   );

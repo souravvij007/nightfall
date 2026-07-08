@@ -1,6 +1,6 @@
 import { LiveKitStage } from "@/components/rooms/LiveKitStage";
 import { RealtimeRefresh } from "@/components/realtime/RealtimeRefresh";
-import { joinVoiceAction, leaveVoiceAction } from "@/app/servers/actions";
+import { joinVoiceAction, leaveVoiceAction, awardVoiceAction } from "@/app/servers/actions";
 
 interface Participant {
   userId: string;
@@ -16,7 +16,17 @@ interface VoiceState {
 }
 
 /** The main-pane UI for a VOICE channel: a lobby to join, then the A/V stage + live participants. */
-export function VoiceChannel({ serverId, voice }: { serverId: string; voice: VoiceState }) {
+export function VoiceChannel({
+  serverId,
+  viewerId,
+  isHost,
+  voice,
+}: {
+  serverId: string;
+  viewerId: string;
+  isHost: boolean;
+  voice: VoiceState;
+}) {
   const { channel, roomId, participants, inRoom } = voice;
 
   return (
@@ -61,6 +71,13 @@ export function VoiceChannel({ serverId, voice }: { serverId: string; voice: Voi
                     HOST
                   </span>
                 )}
+                {/* Host awards points to others for games/tasks. */}
+                {isHost && roomId && p.userId !== viewerId && (
+                  <span className="ml-1 flex gap-1">
+                    <AwardButton serverId={serverId} channelId={channel.id} roomId={roomId} userId={p.userId} reason="ROOM_GAME_WIN" label="🏆 +50" />
+                    <AwardButton serverId={serverId} channelId={channel.id} roomId={roomId} userId={p.userId} reason="ROOM_TASK_COMPLETE" label="✅ +20" />
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -91,5 +108,34 @@ export function VoiceChannel({ serverId, voice }: { serverId: string; voice: Voi
         </div>
       </div>
     </div>
+  );
+}
+
+function AwardButton({
+  serverId,
+  channelId,
+  roomId,
+  userId,
+  reason,
+  label,
+}: {
+  serverId: string;
+  channelId: string;
+  roomId: string;
+  userId: string;
+  reason: string;
+  label: string;
+}) {
+  return (
+    <form action={awardVoiceAction}>
+      <input type="hidden" name="serverId" value={serverId} />
+      <input type="hidden" name="channelId" value={channelId} />
+      <input type="hidden" name="roomId" value={roomId} />
+      <input type="hidden" name="targetUserId" value={userId} />
+      <input type="hidden" name="reason" value={reason} />
+      <button className="rounded-md border border-line bg-hover px-2 py-1 text-xs text-muted transition hover:text-bright">
+        {label}
+      </button>
+    </form>
   );
 }
