@@ -62,6 +62,12 @@ model User {
   dmThreadsB        DmThread[]         @relation("DmUserB")
   sentMessages      Message[]          @relation("MessageSender")
 
+  // Servers & channels (Discord-style)
+  ownedServers    Server[]         @relation("ServerOwner")
+  serverMembers   ServerMember[]
+  channelMessages ChannelMessage[] @relation("ChannelMessageAuthor")
+  createdInvites  ServerInvite[]   @relation("InviteCreator")
+
   // A/V rooms
   hostedRooms        Room[]            @relation("RoomHost")
   roomParticipations RoomParticipant[]
@@ -390,6 +396,90 @@ model Message {
   createdAt DateTime @default(now())
 
   @@index([threadId, createdAt])
+}
+
+// ─────────────────────────────── Servers & channels (Discord-style) ───────────────────────────────
+
+// A "server" (Discord guild): a named space owned by a user, containing members and channels.
+model Server {
+  id        String   @id @default(cuid())
+  name      String
+  iconUrl   String?
+  ownerId   String
+  owner     User     @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  members  ServerMember[]
+  channels Channel[]
+  invites  ServerInvite[]
+
+  @@index([ownerId])
+}
+
+model ServerMember {
+  id       String     @id @default(cuid())
+  serverId String
+  server   Server     @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     ServerRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
+
+  @@unique([serverId, userId])
+  @@index([userId])
+}
+
+enum ServerRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+// A channel within a server. TEXT channels hold ChannelMessages; VOICE channels map to a Room (Phase 2).
+model Channel {
+  id        String      @id @default(cuid())
+  serverId  String
+  server    Server      @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  name      String
+  type      ChannelType @default(TEXT)
+  position  Int         @default(0)
+  createdAt DateTime    @default(now())
+
+  messages ChannelMessage[]
+
+  @@index([serverId, position])
+}
+
+enum ChannelType {
+  TEXT
+  VOICE
+}
+
+model ChannelMessage {
+  id        String   @id @default(cuid())
+  channelId String
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("ChannelMessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([channelId, createdAt])
+}
+
+model ServerInvite {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  serverId    String
+  server      Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User      @relation("InviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  uses        Int       @default(0)
+  maxUses     Int?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([serverId])
 }
 
 // ─────────────────────────────── A/V rooms (Phase 3) ───────────────────────────────

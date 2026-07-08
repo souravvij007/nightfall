@@ -38,6 +38,19 @@ export async function GET(request: Request) {
     });
     const max = threads.reduce((m, t) => Math.max(m, t.lastMessageAt.getTime()), 0);
     version = `${threads.length}:${max}`;
+  } else if (topic === "channel" && id) {
+    // Scoped to a member of the channel's server, so non-members can't probe it.
+    const [count, latest] = await Promise.all([
+      prisma.channelMessage.count({
+        where: { channelId: id, channel: { server: { members: { some: { userId: user.id } } } } },
+      }),
+      prisma.channelMessage.findFirst({
+        where: { channelId: id, channel: { server: { members: { some: { userId: user.id } } } } },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      }),
+    ]);
+    version = `${count}:${latest?.createdAt.getTime() ?? 0}`;
   } else if (topic === "room" && id) {
     const [room, parts] = await Promise.all([
       prisma.room.findUnique({ where: { id }, select: { status: true } }),

@@ -33,6 +33,39 @@ async function main() {
     await prisma.post.create({ data: { authorId: luna.id, caption: "Rooftop meetup this weekend, who's in? ✨", likeCount: 8, commentCount: 2 } });
   }
 
+  // A demo server with text channels + a few messages, so the Discord shell isn't empty.
+  const servers = await prisma.server.count();
+  if (servers === 0) {
+    const server = await prisma.server.create({
+      data: {
+        name: "Nightfall HQ",
+        ownerId: vij.id,
+        members: {
+          create: [
+            { userId: vij.id, role: "OWNER" },
+            { userId: luna.id, role: "MEMBER" },
+          ],
+        },
+        channels: {
+          create: [
+            { name: "general", type: "TEXT", position: 0 },
+            { name: "introductions", type: "TEXT", position: 1 },
+            { name: "Lounge", type: "VOICE", position: 2 },
+          ],
+        },
+      },
+      include: { channels: true },
+    });
+    const general = server.channels.find((c) => c.name === "general")!;
+    await prisma.channelMessage.createMany({
+      data: [
+        { channelId: general.id, authorId: vij.id, body: "Welcome to Nightfall HQ — say hi 👋" },
+        { channelId: general.id, authorId: luna.id, body: "So excited this is finally live! 🌙" },
+        { channelId: general.id, authorId: vij.id, body: "Create your own server anytime with the ＋ in the rail." },
+      ],
+    });
+  }
+
   // An official approved meetup
   const meetups = await prisma.meetup.count();
   if (meetups === 0) {

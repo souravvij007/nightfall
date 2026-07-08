@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { listThreads } from "@/lib/social/dm";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/shell/AppShell";
+import { HomeSidebar } from "@/components/shell/HomeSidebar";
 import { RealtimeRefresh } from "@/components/realtime/RealtimeRefresh";
 
 export default async function MessagesPage() {
@@ -12,30 +13,40 @@ export default async function MessagesPage() {
   const threads = await listThreads(user.id);
 
   return (
-    <div className="flex flex-1 flex-col items-center bg-[#0a0a12] px-6 py-8 text-white">
-      <div className="w-full max-w-xl">
-        <RealtimeRefresh topic="dm" />
-        <AppNav active="messages" />
-        <h1 className="mb-4 text-xl font-bold">Messages</h1>
+    <AppShell activeServerId="home" sidebar={<HomeSidebar active="messages" />}>
+      <RealtimeRefresh topic="dm" />
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4 shadow-sm">
+        <span className="text-muted">💬</span>
+        <span className="font-semibold text-bright">Direct Messages</span>
+      </header>
 
+      <div className="dc-scroll flex-1 overflow-y-auto p-4">
         {threads.length === 0 ? (
-          <p className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center text-white/40">
-            No conversations yet. Open someone's profile and tap Message to start one.
-          </p>
+          <div className="mx-auto mt-16 max-w-sm rounded-2xl border border-line bg-surface px-6 py-10 text-center">
+            <div className="mb-2 text-3xl">💬</div>
+            <p className="text-sm text-muted">
+              No conversations yet. Open someone&apos;s profile and tap Message to start one.
+            </p>
+          </div>
         ) : (
-          <ul className="space-y-2">
+          <ul className="mx-auto max-w-2xl space-y-1">
             {threads.map((t) => (
               <li key={t.id}>
                 <Link
                   href={`/messages/${t.id}`}
-                  className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 transition hover:bg-white/[0.06]"
+                  className="flex items-center gap-3 rounded-lg p-2 transition hover:bg-hover"
                 >
-                  <div className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 font-bold">
-                    {t.other.displayName.charAt(0).toUpperCase()}
-                  </div>
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-indigo to-brand-fuchsia font-bold text-white">
+                    {t.other.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={t.other.avatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
+                    ) : (
+                      t.other.displayName.charAt(0).toUpperCase()
+                    )}
+                  </span>
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold">{t.other.displayName}</div>
-                    <div className="truncate text-sm text-white/50">
+                    <div className="font-semibold text-bright">{t.other.displayName}</div>
+                    <div className="truncate text-sm text-muted">
                       {t.lastMessage ? t.lastMessage.body : "No messages yet"}
                     </div>
                   </div>
@@ -45,6 +56,6 @@ export default async function MessagesPage() {
           </ul>
         )}
       </div>
-    </div>
+    </AppShell>
   );
 }

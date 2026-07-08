@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #08080f;
-  --foreground: #ededed;
+  --background: #1e1f22;
+  --foreground: #dbdee1;
 }
 
 @theme inline {
@@ -16,6 +16,16 @@
   --color-brand-purple: #a855f7;
   --color-brand-fuchsia: #d946ef;
 
+  /* Discord-style surfaces (Nightfall keeps the brand accents above) */
+  --color-bg: #1e1f22; /* darkest — app background + server rail */
+  --color-surface: #2b2d31; /* sidebars: channel list, DM list, member list */
+  --color-panel: #313338; /* main content / chat pane */
+  --color-hover: #35373c; /* row hover */
+  --color-active: #404249; /* selected channel / active row */
+  --color-line: #26282c; /* borders & dividers */
+  --color-muted: #949ba4; /* channel names, timestamps, secondary text */
+  --color-bright: #f2f3f5; /* primary bright text */
+
   --animate-blob: blob 14s ease-in-out infinite;
   --animate-float: float 6s ease-in-out infinite;
   --animate-shimmer: shimmer 8s linear infinite;
@@ -27,6 +37,18 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Discord-like thin scrollbars for channel/message scroll areas */
+.dc-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.dc-scroll::-webkit-scrollbar-thumb {
+  background: #1a1b1e;
+  border-radius: 4px;
+}
+.dc-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Hide scrollbars on horizontal nav rails while keeping scroll */
