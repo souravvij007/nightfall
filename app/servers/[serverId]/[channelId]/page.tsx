@@ -2,11 +2,13 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getServer, listMembers } from "@/lib/servers/service";
 import { listChannelMessages } from "@/lib/servers/messages";
+import { getVoiceRoom, listVoicePresence } from "@/lib/servers/voice";
 import { AppShell } from "@/components/shell/AppShell";
 import { ChannelSidebar } from "@/components/shell/ChannelSidebar";
 import { MemberList } from "@/components/shell/MemberList";
 import { ChannelMessages } from "@/components/shell/ChannelMessages";
 import { ChannelComposer } from "@/components/shell/ChannelComposer";
+import { VoiceChannel } from "@/components/shell/VoiceChannel";
 import { InviteButton } from "@/components/shell/InviteButton";
 import { RealtimeRefresh } from "@/components/realtime/RealtimeRefresh";
 
@@ -24,11 +26,15 @@ export default async function ChannelPage({
   const channel = server.channels.find((c) => c.id === channelId);
   if (!channel) notFound();
 
-  const members = await listMembers(serverId);
+  const [members, voicePresence] = await Promise.all([
+    listMembers(serverId),
+    listVoicePresence(serverId),
+  ]);
   const sidebar = (
     <ChannelSidebar
       server={{ id: server.id, name: server.name, channels: server.channels, canManage: server.canManage }}
       activeChannelId={channelId}
+      voicePresence={voicePresence}
     />
   );
   const right = <MemberList members={members} />;
@@ -44,13 +50,7 @@ export default async function ChannelPage({
       </header>
 
       {channel.type === "VOICE" ? (
-        <div className="flex flex-1 items-center justify-center p-8 text-center text-muted">
-          <div>
-            <div className="mb-2 text-4xl">🔊</div>
-            <p className="font-semibold text-bright">{channel.name}</p>
-            <p className="text-sm">Voice channels arrive in Phase 2 (LiveKit).</p>
-          </div>
-        </div>
+        <VoiceBody user={user.id} serverId={serverId} channelId={channelId} />
       ) : (
         <ChannelBody user={user.id} serverId={serverId} channelId={channelId} channelName={channel.name} />
       )}
@@ -82,5 +82,24 @@ async function ChannelBody({
       </div>
       <ChannelComposer serverId={serverId} channelId={channelId} channelName={channelName} />
     </>
+  );
+}
+
+async function VoiceBody({
+  user,
+  serverId,
+  channelId,
+}: {
+  user: string;
+  serverId: string;
+  channelId: string;
+}) {
+  const voice = await getVoiceRoom(user, channelId);
+  if (!voice) notFound();
+  return (
+    <VoiceChannel
+      serverId={serverId}
+      voice={{ channel: voice.channel, roomId: voice.roomId, participants: voice.participants, inRoom: voice.inRoom }}
+    />
   );
 }

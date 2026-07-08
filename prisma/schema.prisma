@@ -446,6 +446,7 @@ model Channel {
   createdAt DateTime    @default(now())
 
   messages ChannelMessage[]
+  room     Room? // Set for VOICE channels: the persistent A/V room backing this channel.
 
   @@index([serverId, position])
 }
@@ -496,6 +497,10 @@ model Room {
   isOfficial  Boolean    @default(false) // Nightfall-hosted vs. user-hosted (Level 5+)
   createdAt   DateTime   @default(now())
   endedAt     DateTime?
+
+  // A voice Channel maps 1:1 to a persistent Room (Phase 2). Null = legacy standalone room.
+  channelId String?  @unique
+  channel   Channel? @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
   participants RoomParticipant[]
 

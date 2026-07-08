@@ -7,13 +7,17 @@ interface ChannelLite {
   type: "TEXT" | "VOICE";
 }
 
+type VoicePresence = Record<string, { id: string; displayName: string; avatarUrl: string | null }[]>;
+
 /** A server's channel list sidebar: server header + text/voice channels + add-channel for admins. */
 export function ChannelSidebar({
   server,
   activeChannelId,
+  voicePresence = {},
 }: {
   server: { id: string; name: string; channels: ChannelLite[]; canManage: boolean };
   activeChannelId?: string;
+  voicePresence?: VoicePresence;
 }) {
   const text = server.channels.filter((c) => c.type === "TEXT");
   const voice = server.channels.filter((c) => c.type === "VOICE");
@@ -49,13 +53,31 @@ export function ChannelSidebar({
           type="VOICE"
         >
           {voice.map((c) => (
-            <ChannelRow
-              key={c.id}
-              href={`/servers/${server.id}/${c.id}`}
-              active={c.id === activeChannelId}
-              icon="🔊"
-              name={c.name}
-            />
+            <div key={c.id}>
+              <ChannelRow
+                href={`/servers/${server.id}/${c.id}`}
+                active={c.id === activeChannelId}
+                icon="🔊"
+                name={c.name}
+              />
+              {(voicePresence[c.id] ?? []).length > 0 && (
+                <ul className="ml-6 mt-0.5 space-y-0.5">
+                  {voicePresence[c.id].map((u) => (
+                    <li key={u.id} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-muted">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-brand-indigo to-brand-fuchsia text-[9px] font-bold text-white">
+                        {u.avatarUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={u.avatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
+                        ) : (
+                          u.displayName.charAt(0).toUpperCase()
+                        )}
+                      </span>
+                      <span className="truncate">{u.displayName}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           ))}
         </ChannelGroup>
       </div>

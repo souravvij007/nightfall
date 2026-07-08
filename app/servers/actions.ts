@@ -12,6 +12,7 @@ import {
   joinViaInvite,
 } from "@/lib/servers/service";
 import { sendChannelMessage } from "@/lib/servers/messages";
+import { joinVoiceChannel, leaveVoiceChannel } from "@/lib/servers/voice";
 
 export interface ServerFormState {
   error?: string;
@@ -72,6 +73,28 @@ export async function sendChannelMessageAction(formData: FormData) {
   if (!channelId || !parsed.success) return;
 
   await sendChannelMessage(user.id, channelId, parsed.data.body);
+  revalidatePath(`/servers/${serverId}/${channelId}`);
+}
+
+/** Join a voice channel (spins up its room if needed) and stay on the channel page. */
+export async function joinVoiceAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const serverId = String(formData.get("serverId") ?? "");
+  const channelId = String(formData.get("channelId") ?? "");
+  if (!channelId) return;
+  await joinVoiceChannel(user.id, channelId);
+  revalidatePath(`/servers/${serverId}/${channelId}`);
+}
+
+/** Leave a voice channel. */
+export async function leaveVoiceAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const serverId = String(formData.get("serverId") ?? "");
+  const channelId = String(formData.get("channelId") ?? "");
+  if (!channelId) return;
+  await leaveVoiceChannel(user.id, channelId);
   revalidatePath(`/servers/${serverId}/${channelId}`);
 }
 
