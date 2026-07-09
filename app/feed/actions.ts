@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { createPostSchema } from "@/lib/validation/social";
 import { createPost } from "@/lib/social/posts";
 import { toggleLike } from "@/lib/social/engagement";
+import { follow } from "@/lib/social/graph";
 
 export interface PostFormState {
   error?: string;
@@ -33,6 +34,16 @@ export async function createPostAction(
   });
   revalidatePath("/feed");
   return { ok: true };
+}
+
+/** Follow a suggested user from the feed/search suggestions. */
+export async function followUserAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const targetId = String(formData.get("targetId") ?? "");
+  if (targetId) await follow(user.id, targetId);
+  revalidatePath("/feed");
+  revalidatePath("/search");
 }
 
 export async function toggleLikeAction(formData: FormData) {

@@ -6,6 +6,7 @@ import { HomeSidebar } from "@/components/shell/HomeSidebar";
 import { PromoBanner } from "@/components/PromoBanner";
 import { Composer } from "@/components/social/Composer";
 import { PostCard } from "@/components/social/PostCard";
+import { Suggestions } from "@/components/social/Suggestions";
 
 export default async function FeedPage() {
   const user = await getCurrentUser();
@@ -21,27 +22,42 @@ export default async function FeedPage() {
       </header>
 
       <div className="dc-scroll flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-xl px-4 py-6">
-          <div className="mb-4">
-            <PromoBanner variant="feed" />
-          </div>
-          <Composer />
+        <div className="mx-auto flex w-full max-w-4xl justify-center gap-8 px-4 py-6">
+          {/* Main Instagram-style column */}
+          <div className="w-full max-w-[500px]">
+            <div className="mb-4">
+              <PromoBanner variant="feed" />
+            </div>
+            <Composer />
 
-          <div className="mt-6 space-y-4">
-            {posts.length === 0 ? (
-              <div className="rounded-2xl border border-line bg-surface px-6 py-12 text-center">
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-brand-indigo/20 to-brand-fuchsia/20 text-2xl">
-                  🌙
+            {/* Inline suggestions (mobile / < xl, where the right rail is hidden) */}
+            <div className="mt-6 rounded-xl border border-line bg-surface p-4 xl:hidden">
+              <Suggestions viewerId={user.id} />
+            </div>
+
+            <div className="mt-6 space-y-4">
+              {posts.length === 0 ? (
+                <div className="rounded-2xl border border-line bg-surface px-6 py-12 text-center">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-brand-indigo/20 to-brand-fuchsia/20 text-2xl">
+                    🌙
+                  </div>
+                  <h2 className="text-base font-semibold text-bright">Your feed is quiet</h2>
+                  <p className="mx-auto mt-1 max-w-xs text-sm text-muted">
+                    Share your first post above, or follow people below to see their posts here.
+                  </p>
                 </div>
-                <h2 className="text-base font-semibold text-bright">Your feed is quiet</h2>
-                <p className="mx-auto mt-1 max-w-xs text-sm text-muted">
-                  Share your first post above, or follow people to see their posts here.
-                </p>
-              </div>
-            ) : (
-              posts.map((post) => <PostCard key={post.id} post={post} likedByMe={post.likedByMe} />)
-            )}
+              ) : (
+                posts.map((post) => <PostCard key={post.id} post={post} likedByMe={post.likedByMe} />)
+              )}
+            </div>
           </div>
+
+          {/* Suggestions right rail (desktop xl+) */}
+          <aside className="hidden w-72 shrink-0 xl:block">
+            <div className="sticky top-0">
+              <Suggestions viewerId={user.id} />
+            </div>
+          </aside>
         </div>
       </div>
     </AppShell>

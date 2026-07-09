@@ -31,8 +31,8 @@ function timeAgo(date: Date): string {
   return `${Math.floor(h / 24)}d`;
 }
 
+/** Instagram-style post card: header, full-width media, actions, likes, caption. */
 export function PostCard({ post, likedByMe = false }: { post: PostCardData; likedByMe?: boolean }) {
-  // Optimistic like: flip instantly on click, reconcile when the server revalidates.
   const [like, toggleLike] = useOptimistic(
     { liked: likedByMe, count: post.likeCount },
     (s) => ({ liked: !s.liked, count: s.count + (s.liked ? -1 : 1) }),
@@ -46,74 +46,108 @@ export function PostCard({ post, likedByMe = false }: { post: PostCardData; like
   const created = new Date(post.createdAt);
 
   return (
-    <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition-colors hover:border-white/20 hover:bg-white/[0.05]">
-      <header className="flex items-center gap-3">
-        {post.author.avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={post.author.avatarUrl}
-            alt={`${post.author.displayName}'s avatar`}
-            className="h-9 w-9 rounded-full object-cover"
-          />
-        ) : (
-          <div
-            aria-hidden
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-sm font-bold text-white"
-          >
-            {post.author.displayName.charAt(0).toUpperCase()}
-          </div>
-        )}
-        <div className="min-w-0">
+    <article className="overflow-hidden rounded-xl border border-line bg-surface">
+      {/* Header */}
+      <header className="flex items-center gap-2.5 px-3 py-2.5">
+        <Link href={`/u/${post.author.handle}`} className="shrink-0">
+          {post.author.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={post.author.avatarUrl}
+              alt={`${post.author.displayName}'s avatar`}
+              className="h-9 w-9 rounded-full object-cover"
+            />
+          ) : (
+            <span
+              aria-hidden
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-indigo to-brand-fuchsia text-sm font-bold text-white"
+            >
+              {post.author.displayName.charAt(0).toUpperCase()}
+            </span>
+          )}
+        </Link>
+        <div className="min-w-0 flex-1 leading-tight">
           <div className="flex items-center gap-1.5">
-            <Link href={`/u/${post.author.handle}`} className="truncate font-semibold text-white hover:underline">
+            <Link href={`/u/${post.author.handle}`} className="truncate text-sm font-semibold text-bright hover:underline">
               {post.author.displayName}
             </Link>
-            <span className="shrink-0 rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] font-medium text-fuchsia-300">
+            <span className="shrink-0 rounded-full border border-brand-fuchsia/30 bg-brand-fuchsia/10 px-1.5 text-[10px] font-medium text-brand-fuchsia">
               {post.author.rank}
             </span>
           </div>
-          <div className="text-xs text-white/40">
-            @{post.author.handle} · Lvl {post.author.level} ·{" "}
-            <time dateTime={created.toISOString()} title={created.toLocaleString()} suppressHydrationWarning>
-              {timeAgo(created)}
-            </time>
-          </div>
+          <div className="truncate text-xs text-muted">@{post.author.handle}</div>
         </div>
+        <time
+          dateTime={created.toISOString()}
+          title={created.toLocaleString()}
+          suppressHydrationWarning
+          className="shrink-0 text-xs text-muted"
+        >
+          {timeAgo(created)}
+        </time>
       </header>
 
-      {post.caption && <p className="mt-3 whitespace-pre-wrap text-white/90">{post.caption}</p>}
+      {/* Media */}
       {post.mediaUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={post.mediaUrl}
           alt=""
           loading="lazy"
-          className="mt-3 max-h-96 w-full rounded-xl border border-white/10 object-cover"
+          className="max-h-[70vh] w-full bg-black object-cover"
         />
       )}
 
-      <footer className="mt-3 flex items-center gap-4 text-sm">
+      {/* Text-only body */}
+      {!post.mediaUrl && post.caption && (
+        <p className="whitespace-pre-wrap px-3 py-2 text-[15px] text-foreground">{post.caption}</p>
+      )}
+
+      {/* Actions */}
+      <div className="flex items-center gap-4 px-3 pt-2.5 text-sm">
         <form action={onLike}>
           <input type="hidden" name="postId" value={post.id} />
           <button
             type="submit"
             aria-pressed={like.liked}
             aria-label={like.liked ? "Unlike post" : "Like post"}
-            className={`flex items-center gap-1.5 rounded-full px-1 py-0.5 transition active:scale-95 ${like.liked ? "text-fuchsia-400" : "text-white/50 hover:text-white"}`}
+            className={`flex items-center gap-1.5 transition active:scale-90 ${
+              like.liked ? "text-brand-fuchsia" : "text-muted hover:text-bright"
+            }`}
           >
-            <span className="text-base leading-none">{like.liked ? "♥" : "♡"}</span>
-            <span className="tabular-nums">{like.count}</span>
+            <span className="text-xl leading-none">{like.liked ? "♥" : "♡"}</span>
           </button>
         </form>
         <Link
           href={`/p/${post.id}`}
           aria-label={`${post.commentCount} comments`}
-          className="flex items-center gap-1.5 rounded-full px-1 py-0.5 text-white/50 transition hover:text-white"
+          className="flex items-center gap-1.5 text-muted transition hover:text-bright"
         >
-          <span>💬</span>
-          <span className="tabular-nums">{post.commentCount}</span>
+          <span className="text-lg leading-none">💬</span>
         </Link>
-      </footer>
+      </div>
+
+      {/* Likes */}
+      <div className="px-3 pt-1.5 text-sm font-semibold text-bright">
+        <span className="tabular-nums">{like.count}</span> {like.count === 1 ? "like" : "likes"}
+      </div>
+
+      {/* Caption (when there's media) */}
+      {post.mediaUrl && post.caption && (
+        <p className="px-3 pt-0.5 text-[15px] text-foreground">
+          <Link href={`/u/${post.author.handle}`} className="mr-1.5 font-semibold text-bright hover:underline">
+            {post.author.displayName}
+          </Link>
+          <span className="whitespace-pre-wrap">{post.caption}</span>
+        </p>
+      )}
+
+      {/* Comments link */}
+      <Link href={`/p/${post.id}`} className="block px-3 pb-3 pt-1 text-sm text-muted hover:text-bright">
+        {post.commentCount === 0
+          ? "Add a comment…"
+          : `View ${post.commentCount === 1 ? "1 comment" : `all ${post.commentCount} comments`}`}
+      </Link>
     </article>
   );
 }

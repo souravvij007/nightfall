@@ -4,6 +4,7 @@ import { listThreads } from "@/lib/social/dm";
 
 // Voice lives inside servers now (Phase 2), so "Rooms" is no longer a top-level destination.
 const NAV = [
+  { href: "/search", label: "Search", icon: "🔍", key: "search" },
   { href: "/feed", label: "Feed", icon: "🏠", key: "feed" },
   { href: "/meetups", label: "Meetups", icon: "📍", key: "meetups" },
   { href: "/trips", label: "Trips", icon: "🧭", key: "trips" },
